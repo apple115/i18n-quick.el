@@ -1,0 +1,21 @@
+* 简单的i18n 的一个简单插件,是我自己用来进行vue项目开发的
+
+** 简洁
+
+尽量集成emacs中有的插件使用 consult 查看当前的i18n,使用embark 进行对于当前位置的操作
+Emacs 的 JSON写回机制,还不是很熟悉,导致了写回的操作使用的是外部进程 jq
+
+** 操作
+需要开启i18n-quick-mode
+i18n-quick-mode
+i18n-quick-consult-line
+i18n-quick-clear-cache
+i18n-quick-switch-lang
+i18n-quick-jump-or-create
+
+** embark 操作
+
+在开启i18n-quick-mode的情况下
+使用embark-act可以选中类型t('aaa.bbb.ccc')进行操作，可以跳转或创建key
+
+本项目几乎全程使用claude code + glm 4.7 进行开发
