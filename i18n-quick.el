@@ -143,6 +143,7 @@
 ;; 4. 专属搜索命令 (核心改进)
 ;; ==========================================
 
+;;;###autoload
 (defun i18n-quick-consult-line ()
   "针对当前 Buffer 内 i18n Key 的专属搜索视图。"
   (interactive)
@@ -182,7 +183,7 @@
 ;; 5. 交互命令
 ;; ==========================================
 
-(defun i18n-quick--search-nested-path (keys)
+(defun i18n-quick--search-nested-path-legacy (keys)
   "逐层搜索嵌套路径，避免同名 key 冲突。
 例如：keys = ('common' 'button' 'save')
 步骤：
@@ -206,6 +207,7 @@
       ;; 所有层级都匹配成功
       t)))
 
+;;;###autoload
 (defun i18n-quick-jump-or-create ()
   "跳转或创建翻译。如果 Key 不存在，不询问直接创建空值并跳转。"
   (interactive)
@@ -244,6 +246,7 @@
           ;; 重要：创建完成后再次调用自己，触发上面的“分支 1”进行跳转
           (i18n-quick-jump-or-create))))))
 
+;;;###autoload
 (defun i18n-quick-switch-lang ()
   (interactive)
   (let* ((langs (mapcar #'car i18n-quick-languages))
@@ -276,6 +279,26 @@ KEYS 是字符串列表（如 '(\"menus\" \"platform\")），
   (interactive)
   (clrhash i18n-quick--file-cache)
   (message "i18n-quick 缓存已清空"))
+
+;; ==========================================
+;; tree-sitter 的集成
+;; ==========================================
+
+(require 'i18n-quick-treesit nil t)
+
+;;;###autoload
+(defun i18n-quick--search-nested-path (keys)
+  "智能搜索嵌套路径：优先 tree-sitter，降级到传统方式"
+  (cond
+   ;; 使用 tree-sitter
+   ((and (featurep 'i18n-quick-treesit)
+         (i18n-quick--treesit-available-p)
+         (derived-mode-p 'json-mode 'json-ts-mode))
+    (i18n-quick--search-nested-path-treesit keys))
+
+   ;; 降级到传统方式
+   (t
+    (i18n-quick--search-nested-path-legacy keys))))
 
 ;; ==========================================
 ;; 6. Mode 定义
