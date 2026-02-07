@@ -240,11 +240,20 @@
                   (recenter))
               (message "找到文件但未匹配到具体的 Key 文本")))
 
-        ;; --- 分支 2: 不存在则“静默创建” ---
-        (let ((new-data (i18n-quick--update-alist data keys "")))
-          (i18n-quick--save file new-data)
-          ;; 重要：创建完成后再次调用自己，触发上面的“分支 1”进行跳转
-          (i18n-quick-jump-or-create))))))
+        ;; --- 分支 2: 不存在则"静默创建" ---
+        ;; 优先使用 tree-sitter 直接操作 AST
+        (cond
+         ;; 使用 tree-sitter 保存
+         ((and (featurep 'i18n-quick-treesit)
+               (fboundp 'i18n-quick--treesit-available-p)
+               (i18n-quick--treesit-available-p))
+          (i18n-quick--treesit-save file keys ""))
+         ;; 降级到传统 alist 方式
+         (t
+          (let ((new-data (i18n-quick--update-alist data keys "")))
+            (i18n-quick--save file new-data))))
+        ;; 重要：创建完成后再次调用自己，触发上面的"分支 1"进行跳转
+        (i18n-quick-jump-or-create)))))
 
 ;;;###autoload
 (defun i18n-quick-switch-lang ()

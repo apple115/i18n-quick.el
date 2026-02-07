@@ -309,4 +309,153 @@
                                      :null-object :null
                                      :false-object :false)))))
 
+;; ============================================
+;; 测试用例：tree-sitter AST 直接操作
+;; ============================================
+
+(ert-deftest i18n-quick-treesit-find-path-simple ()
+  "测试 tree-sitter 查找简单路径"
+  (skip-unless (and (featurep 'i18n-quick-treesit)
+                    (i18n-quick--treesit-available-p)))
+  (let ((buf (i18n-quick-test--create-temp-buffer "{
+  \"save\": \"保存\"
+}")))
+    (unwind-protect
+        (with-current-buffer buf
+          (json-ts-mode)
+          (let* ((root (treesit-buffer-root-node))
+                 (result (i18n-quick--treesit-find-path root '("save"))))
+            (should (consp result))
+            (should (string= (cdr result) "save"))))
+      (kill-buffer buf))))
+
+(ert-deftest i18n-quick-treesit-find-path-nested ()
+  "测试 tree-sitter 查找嵌套路径"
+  (skip-unless (and (featurep 'i18n-quick-treesit)
+                    (i18n-quick--treesit-available-p)))
+  (let ((buf (i18n-quick-test--create-temp-buffer "{
+  \"common\": {
+    \"button\": {
+      \"save\": \"保存\"
+    }
+  }
+}")))
+    (unwind-protect
+        (with-current-buffer buf
+          (json-ts-mode)
+          (let* ((root (treesit-buffer-root-node))
+                 (result (i18n-quick--treesit-find-path root '("common" "button" "save"))))
+            (should (consp result))
+            (should (string= (cdr result) "save"))))
+      (kill-buffer buf))))
+
+(ert-deftest i18n-quick-treesit-find-path-not-found ()
+  "测试 tree-sitter 查找不存在的路径"
+  (skip-unless (and (featurep 'i18n-quick-treesit)
+                    (i18n-quick--treesit-available-p)))
+  (let ((buf (i18n-quick-test--create-temp-buffer "{
+  \"common\": {
+    \"save\": \"保存\"
+  }
+}")))
+    (unwind-protect
+        (with-current-buffer buf
+          (json-ts-mode)
+          (let* ((root (treesit-buffer-root-node))
+                 (result (i18n-quick--treesit-find-path root '("common" "cancel"))))
+            (should (null result))))
+      (kill-buffer buf))))
+
+(ert-deftest i18n-quick-treesit-create-path-simple ()
+  "测试 tree-sitter 创建简单路径"
+  (skip-unless (and (featurep 'i18n-quick-treesit)
+                    (i18n-quick--treesit-available-p)))
+  (let ((buf (i18n-quick-test--create-temp-buffer "{}")))
+    (unwind-protect
+        (with-current-buffer buf
+          (json-ts-mode)
+          (let* ((root (treesit-buffer-root-node)))
+            (i18n-quick--treesit-create-path root '("key") "value"))
+          ;; 验证创建成功
+          (goto-char (point-min))
+          (should (search-forward "\"key\"" nil t))
+          (should (search-forward "\"value\"" nil t)))
+      (kill-buffer buf))))
+
+(ert-deftest i18n-quick-treesit-create-path-nested ()
+  "测试 tree-sitter 创建嵌套路径"
+  (skip-unless (and (featurep 'i18n-quick-treesit)
+                    (i18n-quick--treesit-available-p)))
+  (let ((buf (i18n-quick-test--create-temp-buffer "{}")))
+    (unwind-protect
+        (with-current-buffer buf
+          (json-ts-mode)
+          (let* ((root (treesit-buffer-root-node)))
+            (i18n-quick--treesit-create-path root '("common" "button" "save") "保存"))
+          ;; 验证创建成功
+          (goto-char (point-min))
+          (should (search-forward "\"common\"" nil t))
+          (should (search-forward "\"button\"" nil t))
+          (should (search-forward "\"save\"" nil t))
+          (should (search-forward "\"保存\"" nil t)))
+      (kill-buffer buf))))
+
+(ert-deftest i18n-quick-treesit-replace-value ()
+  "测试 tree-sitter 替换值"
+  (skip-unless (and (featurep 'i18n-quick-treesit)
+                    (i18n-quick--treesit-available-p)))
+  (let ((buf (i18n-quick-test--create-temp-buffer "{
+  \"save\": \"旧值\"
+}")))
+    (unwind-protect
+        (with-current-buffer buf
+          (json-ts-mode)
+          (let* ((root (treesit-buffer-root-node))
+                 (result (i18n-quick--treesit-find-path root '("save")))
+                 (parent-node (car result))
+                 (key (cdr result))
+                 (pair (i18n-quick--treesit-find-pair-in-object parent-node key)))
+            (should pair)
+            (i18n-quick--treesit-replace-value pair "新值"))
+          ;; 验证替换成功
+          (goto-char (point-min))
+          (should (search-forward "\"新值\"" nil t))
+          (should-not (search-forward "\"旧值\"" nil t)))
+      (kill-buffer buf))))
+
+(ert-deftest i18n-quick-treesit-save-new-key ()
+  "测试 tree-sitter 保存新 key"
+  (skip-unless (and (featurep 'i18n-quick-treesit)
+                    (i18n-quick--treesit-available-p)))
+  (let* ((temp-file (make-temp-file "i18n-quick-test" nil ".json" "{}")))
+    (unwind-protect
+        (progn
+          (i18n-quick--treesit-save temp-file '("test" "key") "测试值")
+          ;; 验证文件内容
+          (with-temp-buffer
+            (insert-file-contents temp-file)
+            (goto-char (point-min))
+            (should (search-forward "\"test\"" nil t))
+            (should (search-forward "\"key\"" nil t))
+            (should (search-forward "\"测试值\"" nil t))))
+      (delete-file temp-file))))
+
+(ert-deftest i18n-quick-treesit-save-replace-existing ()
+  "测试 tree-sitter 替换已存在的 key"
+  (skip-unless (and (featurep 'i18n-quick-treesit)
+                    (i18n-quick--treesit-available-p)))
+  (let* ((temp-file (make-temp-file "i18n-quick-test" nil ".json" "{
+  \"save\": \"旧值\"
+}")))
+    (unwind-protect
+        (progn
+          (i18n-quick--treesit-save temp-file '("save") "新值")
+          ;; 验证文件内容
+          (with-temp-buffer
+            (insert-file-contents temp-file)
+            (goto-char (point-min))
+            (should (search-forward "\"新值\"" nil t))
+            (should-not (search-forward "\"旧值\"" nil t))))
+      (delete-file temp-file))))
+
 (provide 'i18n-quick-test)
