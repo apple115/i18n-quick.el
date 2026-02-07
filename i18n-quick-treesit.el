@@ -2,15 +2,16 @@
 
 (require 'treesit)
 
-;; 声明使用的主文件中的变量（避免循环依赖）
-(defvar i18n-quick--file-cache)
-
 (defun i18n-quick--treesit-available-p()
   "检查treesitter 是否可用"
   (and (version<= "29" emacs-version)
-       (boundp 'treesit-available-p)
+       (fboundp 'treesit-available-p)
        (treesit-available-p)
-       (treesit-language-p 'json)))
+       (condition-case nil
+           (progn
+             (treesit-parser-create 'json)
+             t)
+         (error nil))))
 
 
 (defun i18n-quick--read-json-treesit (file)
@@ -85,7 +86,6 @@ KEYS 是一个字符串列表，例如 (\"common\" \"button\" \"save\")。
       (when found-pos
         (goto-char found-pos)
         (skip-chars-forward " \t\n:")
-        (skip-chars-forward " \t\n:")
         t))))
 
 ;; ==========================================
@@ -150,8 +150,9 @@ KEYS 是字符串列表，例如 (\"common\" \"button\" \"save\")。
       (when (and current-node remaining-keys)
         (setq parent-node current-node))
 
-      ;; 返回 (parent-node . last-key)
-      (when parent-node
+      ;; 返回 (parent-node . last-key)，但前提是最后一个 key 真的存在
+      (when (and parent-node
+                 (i18n-quick--treesit-find-pair-in-object parent-node (car remaining-keys)))
         (cons parent-node (car remaining-keys))))))
 
 (defun i18n-quick--treesit-get-indentation (obj-node)
@@ -219,7 +220,7 @@ VALUE 是要设置的值字符串。
                 (i18n-quick--treesit-create-empty-object current-node key indent)
                 ;; 重新获取当前节点
                 (setq current-node (i18n-quick--treesit-get-object-node
-                                   (treesit-buffer-root-node)))
+                                    (treesit-buffer-root-node)))
                 ;; 再次查找刚创建的 pair
                 (setq pair (i18n-quick--treesit-find-pair-in-object current-node key))
                 (when pair
@@ -265,9 +266,9 @@ KEYS 是键路径列表。
 VALUE 是要设置的值。
 
 直接操作 AST，避免 alist 转换，保留原有格式和注释。"
-  (with-temp-buffer
-    (when (file-exists-p file)
-      (insert-file-contents file))
+  (with-current-buffer (find-file-noselect file)
+    (unless (derived-mode-p 'json-ts-mode)
+      (json-ts-mode))
     (unless (treesit-parser-list)
       (treesit-parser-create 'json))
     ;; 如果文件为空，创建基础结构
@@ -285,10 +286,8 @@ VALUE 是要设置的值。
               (i18n-quick--treesit-replace-value pair value)))
         ;; 路径不存在，创建新路径
         (i18n-quick--treesit-create-path root keys value)))
-    ;; 写回文件（不添加末尾换行）
-    (write-region nil nil file nil 0)
-    ;; 清除缓存
-    (remhash file i18n-quick--file-cache)))
+    ;; 保存 buffer
+    (save-buffer)
+    t))
 
 (provide 'i18n-quick-treesit)
-
